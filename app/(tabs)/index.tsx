@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -10,11 +10,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
-  PanResponder,
   Alert,
 } from "react-native";
+import { PanGestureHandler, PanGestureHandlerGestureEvent, State } from "react-native-gesture-handler";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Edit3, Plus, Check, X, Flame, Calendar, Minus } from "lucide-react-native";
+import { Edit3, Plus, Check, X, Flame, Calendar } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { useTasks } from "@/providers/TaskProvider";
@@ -43,6 +43,13 @@ export default function HomeScreen() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [showSetupModal, setShowSetupModal] = useState(false);
   const [newTasks, setNewTasks] = useState<string[]>(["", "", ""]);
+  const [dragState, setDragState] = useState({
+    isDragging: false,
+    draggedTaskId: null as string | null,
+    draggedTaskIndex: -1,
+    currentY: 0,
+    initialY: 0,
+  });
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnims = useRef([
     new Animated.Value(0.9),
@@ -129,9 +136,75 @@ export default function HomeScreen() {
   // Separate completed and incomplete tasks
   const incompleteTasks = tasks.filter(t => !t.completed);
   const completedTasks = tasks.filter(t => t.completed);
-  
-  // Reorder incomplete tasks to maintain priority order
-  const orderedTasks = [...incompleteTasks, ...completedTasks];
+
+  const handleDragStart = (taskId: string, index: number) => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    setDragState({
+      isDragging: true,
+      draggedTaskId: taskId,
+      draggedTaskIndex: index,
+      currentY: 0,
+      initialY: 0,
+    });
+  };
+
+  const handleDragMove = (y: number) => {
+    setDragState(prev => ({
+      ...prev,
+      currentY: y,
+    }));
+  };
+
+  const handleDragEnd = () => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    
+    // Calculate the drop index and perform reordering if necessary
+    if (dragState.isDragging && dragState.draggedTaskIndex !== -1) {
+      const dropIndex = getDropIndex(dragState.currentY);
+      
+      if (dropIndex !== dragState.draggedTaskIndex) {
+        reorderTasks(dragState.draggedTaskIndex, dropIndex);
+      }
+    }
+    
+    setDragState({
+      isDragging: false,
+      draggedTaskId: null,
+      draggedTaskIndex: -1,
+      currentY: 0,
+      initialY: 0,
+    });
+  };
+
+  const getDropIndex = (currentY: number) => {
+    try {
+      const taskHeight = 140; // Approximate height of each task card including margins
+      const baseY = 200; // Starting Y position of first task (account for header)
+      
+      // Safety checks
+      if (!Number.isFinite(currentY) || incompleteTasks.length === 0) {
+        return 0;
+      }
+      
+      if (currentY < baseY) return 0;
+      
+      for (let i = 0; i < incompleteTasks.length; i++) {
+        const taskY = baseY + (i * taskHeight);
+        if (currentY < taskY + (taskHeight / 2)) {
+          return Math.max(0, Math.min(i, incompleteTasks.length - 1));
+        }
+      }
+      
+      return Math.max(0, incompleteTasks.length - 1);
+    } catch (error) {
+      console.error("Error calculating drop index:", error);
+      return 0; // Default to first position on error
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -173,6 +246,7 @@ export default function HomeScreen() {
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          scrollEnabled={!dragState.isDragging}
         >
           {tasks.length === 0 ? (
             <View style={styles.emptyState}>
@@ -190,30 +264,26 @@ export default function HomeScreen() {
           ) : (
             <View style={styles.tasksContainer}>
               {isEditMode && (
-                <Text style={styles.editHint}>Drag tasks to reorder</Text>
+                <Text style={styles.editHint}>Long press and drag to reorder tasks</Text>
               )}
-              {incompleteTasks.map((task, index) => {
-                return (
-                  <DraggableTaskCard
-                    key={task.id}
-                    task={task}
-                    index={index}
-                    color={getTaskColor(index, false)}
-                    label={getTaskLabel(index)}
-                    isEditMode={isEditMode}
-                    onPress={() => handleTaskPress(task)}
-                    onToggleComplete={() => handleToggleComplete(task.id)}
-                    onReorder={(fromIndex, toIndex) => {
-                      // Convert incomplete task indices to full task array indices
-                      const fromTaskIndex = tasks.findIndex(t => t.id === incompleteTasks[fromIndex].id);
-                      const toTaskIndex = tasks.findIndex(t => t.id === incompleteTasks[toIndex].id);
-                      reorderTasks(fromTaskIndex, toTaskIndex);
-                    }}
-                    scaleAnim={scaleAnims[index] || new Animated.Value(1)}
-                    isCompleted={false}
-                  />
-                );
-              })}
+              
+              {incompleteTasks.map((task, index) => (
+                <DraggableTaskCard
+                  key={task.id}
+                  task={task}
+                  index={index}
+                  color={getTaskColor(index, false)}
+                  label={getTaskLabel(index)}
+                  isEditMode={isEditMode}
+                  onPress={() => handleTaskPress(task)}
+                  onToggleComplete={() => handleToggleComplete(task.id)}
+                  onDragStart={() => handleDragStart(task.id, index)}
+                  onDragMove={handleDragMove}
+                  onDragEnd={handleDragEnd}
+                  isDragging={dragState.draggedTaskId === task.id}
+                  scaleAnim={scaleAnims[index] || new Animated.Value(1)}
+                />
+              ))}
               
               {completedTasks.length > 0 && (
                 <View>
@@ -226,7 +296,7 @@ export default function HomeScreen() {
                   {completedTasks.map((task, index) => {
                     const originalIndex = tasks.findIndex(t => t.id === task.id);
                     return (
-                      <DraggableTaskCard
+                      <TaskCard
                         key={task.id}
                         task={task}
                         index={originalIndex}
@@ -235,9 +305,7 @@ export default function HomeScreen() {
                         isEditMode={false}
                         onPress={() => handleTaskPress(task)}
                         onToggleComplete={() => handleToggleComplete(task.id)}
-                        onReorder={reorderTasks}
                         scaleAnim={scaleAnims[originalIndex] || new Animated.Value(1)}
-                        isCompleted={true}
                       />
                     );
                   })}
@@ -324,9 +392,11 @@ interface DraggableTaskCardProps {
   isEditMode: boolean;
   onPress: () => void;
   onToggleComplete: () => void;
-  onReorder: (fromIndex: number, toIndex: number) => void;
+  onDragStart: () => void;
+  onDragMove: (y: number) => void;
+  onDragEnd: () => void;
+  isDragging: boolean;
   scaleAnim: Animated.Value;
-  isCompleted: boolean;
 }
 
 function DraggableTaskCard({ 
@@ -337,85 +407,146 @@ function DraggableTaskCard({
   isEditMode, 
   onPress, 
   onToggleComplete,
-  onReorder,
-  scaleAnim,
-  isCompleted 
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  isDragging,
+  scaleAnim
 }: DraggableTaskCardProps) {
-  const pan = useRef(new Animated.ValueXY()).current;
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStartY, setDragStartY] = useState(0);
+  const [dragOffset, setDragOffset] = useState(0);
+  const panRef = useRef<PanGestureHandler>(null);
 
-  const panResponder = useMemo(() => 
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => isEditMode && !isCompleted,
-      onMoveShouldSetPanResponder: () => isEditMode && !isCompleted,
-      onPanResponderGrant: (evt) => {
-        setIsDragging(true);
-        setDragStartY(evt.nativeEvent.pageY);
-        if (Platform.OS !== 'web') {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }
-      },
-      onPanResponderMove: Animated.event(
-        [null, { dx: pan.x, dy: pan.y }],
-        { useNativeDriver: false }
-      ),
-      onPanResponderRelease: (_, gestureState) => {
-        setIsDragging(false);
-        
-        // Calculate which position to drop based on vertical movement
-        const cardHeight = 140; // Approximate height of each card including margin
-        const moveDistance = gestureState.dy;
-        const indexChange = Math.round(moveDistance / cardHeight);
-        const newIndex = Math.min(2, Math.max(0, index + indexChange));
-        
-        if (newIndex !== index && Math.abs(moveDistance) > cardHeight / 3) {
-          onReorder(index, newIndex);
-          if (Platform.OS !== 'web') {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          }
-        }
-        
-        // Reset position
-        Animated.spring(pan, {
-          toValue: { x: 0, y: 0 },
-          useNativeDriver: false,
-        }).start();
-      },
-    }), [isEditMode, index, onReorder, isCompleted]);
+  const onGestureEvent = (event: PanGestureHandlerGestureEvent) => {
+    // Use React state instead of Animated.Value to avoid conflicts
+    setDragOffset(event.nativeEvent.translationY);
+    onDragMove(event.nativeEvent.absoluteY);
+  };
+
+  const onHandlerStateChange = (event: any) => {
+    const { state } = event.nativeEvent;
+    
+    if (state === State.BEGAN) {
+      onDragStart();
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+    } else if (state === State.END || state === State.CANCELLED) {
+      // Reset position
+      setDragOffset(0);
+      onDragEnd();
+    }
+  };
 
   return (
+    <PanGestureHandler
+      ref={panRef}
+      enabled={isEditMode && !task.completed}
+      activeOffsetY={[-15, 15]}
+      shouldCancelWhenOutside={false}
+      onGestureEvent={onGestureEvent}
+      onHandlerStateChange={onHandlerStateChange}
+    >
+      <Animated.View
+        style={[
+          styles.taskCard,
+          { backgroundColor: color },
+          {
+            transform: [
+              { scale: scaleAnim },
+              { translateY: isDragging ? dragOffset : 0 }
+            ],
+            opacity: isDragging ? 0.8 : 1,
+            zIndex: isDragging ? 1000 : 1,
+            elevation: isDragging ? 15 : 8,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          onPress={onPress}
+          activeOpacity={0.7}
+          disabled={isEditMode}
+          style={styles.taskCardTouchable}
+        >
+          <View style={styles.taskCardContent}>
+            <View style={styles.taskLeft}>
+              <View style={[styles.priorityIndicator, { backgroundColor: "rgba(0,0,0,0.2)" }]}>
+                <Text style={styles.priorityLabel}>{label}</Text>
+              </View>
+              <Text style={[
+                styles.taskTitle,
+                task.completed && styles.taskTitleCompleted
+              ]}>
+                {task.title}
+              </Text>
+              {task.notes && (
+                <Text style={styles.taskNotes} numberOfLines={1}>
+                  {task.notes}
+                </Text>
+              )}
+              {task.subBullets.length > 0 && (
+                <Text style={styles.subBulletCount}>
+                  {task.subBullets.filter(b => b.completed).length}/{task.subBullets.length} sub-tasks
+                </Text>
+              )}
+            </View>
+            
+            <TouchableOpacity
+              onPress={onToggleComplete}
+              style={[
+                styles.checkbox,
+                task.completed && styles.checkboxCompleted
+              ]}
+            >
+              {task.completed && <Check size={16} color="white" />}
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    </PanGestureHandler>
+  );
+}
+
+interface TaskCardProps {
+  task: Task;
+  index: number;
+  color: string;
+  label: string;
+  isEditMode: boolean;
+  onPress: () => void;
+  onToggleComplete: () => void;
+  scaleAnim: Animated.Value;
+}
+
+function TaskCard({ 
+  task, 
+  index, 
+  color, 
+  label, 
+  isEditMode, 
+  onPress, 
+  onToggleComplete,
+  scaleAnim 
+}: TaskCardProps) {
+  return (
     <Animated.View
-      {...panResponder.panHandlers}
       style={[
         styles.taskCard,
         { backgroundColor: color },
-        isCompleted && styles.taskCardCompleted,
         {
-          transform: [
-            { translateX: pan.x },
-            { translateY: pan.y },
-            { scale: scaleAnim }
-          ],
-          opacity: isDragging ? 0.9 : (isCompleted ? 0.6 : 1),
-          zIndex: isDragging ? 1000 : 1,
-          elevation: isDragging ? 10 : 2,
+          transform: [{ scale: scaleAnim }],
         },
       ]}
     >
       <TouchableOpacity
         onPress={onPress}
         activeOpacity={0.7}
-        disabled={isEditMode}
         style={styles.taskCardTouchable}
       >
         <View style={styles.taskCardContent}>
           <View style={styles.taskLeft}>
-            {!isCompleted && (
-              <View style={[styles.priorityIndicator, { backgroundColor: "rgba(0,0,0,0.2)" }]}>
-                <Text style={styles.priorityLabel}>{label}</Text>
-              </View>
-            )}
+            <View style={[styles.priorityIndicator, { backgroundColor: "rgba(0,0,0,0.2)" }]}>
+              <Text style={styles.priorityLabel}>{label}</Text>
+            </View>
             <Text style={[
               styles.taskTitle,
               task.completed && styles.taskTitleCompleted
@@ -732,7 +863,11 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
   },
-  taskCardCompleted: {
-    opacity: 0.6,
+  dropZone: {
+    height: 4,
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
+    marginHorizontal: 20,
+    marginVertical: 8,
   },
 });

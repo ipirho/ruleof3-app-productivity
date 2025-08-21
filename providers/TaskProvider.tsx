@@ -141,10 +141,36 @@ export const [TaskProvider, useTasks] = createContextHook(() => {
 
   const reorderTasks = useCallback((fromIndex: number, toIndex: number) => {
     setTasks(prevTasks => {
-      const newTasks = [...prevTasks];
-      const [movedTask] = newTasks.splice(fromIndex, 1);
-      newTasks.splice(toIndex, 0, movedTask);
-      return newTasks;
+      try {
+        // Validate indices
+        if (fromIndex < 0 || toIndex < 0 || 
+            fromIndex >= prevTasks.length || toIndex >= prevTasks.length ||
+            fromIndex === toIndex) {
+          console.warn("Invalid reorder indices:", { fromIndex, toIndex, tasksLength: prevTasks.length });
+          return prevTasks; // Return unchanged if invalid
+        }
+
+        // Only allow reordering of incomplete tasks
+        const incompleteTasks = prevTasks.filter(t => !t.completed);
+        const completedTasks = prevTasks.filter(t => t.completed);
+        
+        if (fromIndex >= incompleteTasks.length || toIndex >= incompleteTasks.length) {
+          console.warn("Index out of bounds for incomplete tasks");
+          return prevTasks;
+        }
+
+        // Reorder only the incomplete tasks
+        const newIncompleteTasks = [...incompleteTasks];
+        const [movedTask] = newIncompleteTasks.splice(fromIndex, 1);
+        newIncompleteTasks.splice(toIndex, 0, movedTask);
+        
+        // Combine back together: incomplete tasks first, then completed
+        return [...newIncompleteTasks, ...completedTasks];
+        
+      } catch (error) {
+        console.error("Error in reorderTasks:", error);
+        return prevTasks; // Return unchanged on error
+      }
     });
   }, []);
 
