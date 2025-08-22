@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import createContextHook from "@nkzw/create-context-hook";
-import { Task, SubBullet, AppState } from "@/types/task";
+import { Task, SubBullet, AppState, HistoricalAppState } from "@/types/task";
 
 const STORAGE_KEY = "ruleof3_app_state";
 
@@ -12,6 +12,9 @@ export const [TaskProvider, useTasks] = createContextHook(() => {
   const [totalTasksCompleted, setTotalTasksCompleted] = useState(0);
   const [lastCompletedDate, setLastCompletedDate] = useState<string | null>(null);
   const [hasSetTasksToday, setHasSetTasksToday] = useState(false);
+  // New state for historical data
+  const [taskHistory, setTaskHistory] = useState<{ [dateString: string]: Task[] }>({});
+  const [firstUseDate, setFirstUseDate] = useState<string>("");
 
   // Load state from storage
   useEffect(() => {
@@ -21,14 +24,27 @@ export const [TaskProvider, useTasks] = createContextHook(() => {
   // Save state to storage whenever it changes
   useEffect(() => {
     saveAppState();
-  }, [tasks, streak, longestStreak, totalTasksCompleted, lastCompletedDate, hasSetTasksToday]);
+  }, [tasks, streak, longestStreak, totalTasksCompleted, lastCompletedDate, hasSetTasksToday, taskHistory, firstUseDate]);
 
   const loadAppState = async () => {
     try {
+      // TODO: Backend - Replace with API call to fetch user's historical data and first usage date
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       if (stored) {
         const state: AppState = JSON.parse(stored);
         const today = new Date().toDateString();
+        
+        // Data migration: Handle old format and set up historical storage
+        const history = state.taskHistory || {};
+        const firstUse = state.firstUseDate || state.lastActiveDate || today;
+        
+        // Store previous day's tasks in history if they exist and we're switching to a new day
+        if (state.lastActiveDate !== today && state.tasks.length > 0) {
+          history[state.lastActiveDate] = state.tasks;
+        }
+        
+        setTaskHistory(history);
+        setFirstUseDate(firstUse);
         
         // Check if it's a new day
         if (state.lastActiveDate !== today) {
@@ -62,6 +78,10 @@ export const [TaskProvider, useTasks] = createContextHook(() => {
         setLongestStreak(state.longestStreak);
         setTotalTasksCompleted(state.totalTasksCompleted);
         setLastCompletedDate(state.lastCompletedDate);
+      } else {
+        // First time user - set initial first use date
+        const today = new Date().toDateString();
+        setFirstUseDate(today);
       }
     } catch (error) {
       console.error("Error loading app state:", error);
@@ -70,20 +90,59 @@ export const [TaskProvider, useTasks] = createContextHook(() => {
 
   const saveAppState = async () => {
     try {
+      // TODO: Backend - Replace with API call to sync data to server
+      const today = new Date().toDateString();
+      
+      // Store current day's tasks in history before saving
+      const updatedHistory = { ...taskHistory };
+      if (tasks.length > 0) {
+        updatedHistory[today] = tasks;
+      }
+      
       const state: AppState = {
         tasks,
         streak,
         longestStreak,
         totalTasksCompleted,
         lastCompletedDate,
-        lastActiveDate: new Date().toDateString(),
+        lastActiveDate: today,
         hasSetTasksToday,
+        taskHistory: updatedHistory,
+        firstUseDate: firstUseDate || today,
       };
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (error) {
       console.error("Error saving app state:", error);
     }
   };
+
+  // Utility function to get tasks for a specific date
+  const getTasksForDate = useCallback((dateString: string): Task[] => {
+    // TODO: Backend - Replace with API call to fetch tasks for specific date
+    const today = new Date().toDateString();
+    if (dateString === today) {
+      return tasks;
+    }
+    return taskHistory[dateString] || [];
+  }, [tasks, taskHistory]);
+
+  // Utility function to get the earliest date with tasks
+  const getFirstTaskDate = useCallback((): string => {
+    // TODO: Backend - Replace with API call to get user's first task date
+    return firstUseDate || new Date().toDateString();
+  }, [firstUseDate]);
+
+  // Utility function to check if a date has completed tasks
+  const hasCompletedTasksOnDate = useCallback((dateString: string): boolean => {
+    const tasksForDate = getTasksForDate(dateString);
+    return tasksForDate.length === 3 && tasksForDate.every(t => t.completed);
+  }, [getTasksForDate]);
+
+  // Utility function to check if a date has any tasks
+  const hasTasksOnDate = useCallback((dateString: string): boolean => {
+    const tasksForDate = getTasksForDate(dateString);
+    return tasksForDate.length > 0;
+  }, [getTasksForDate]);
 
   const setDailyTasks = useCallback((taskTitles: string[]) => {
     const newTasks: Task[] = taskTitles.map((title, index) => ({
@@ -185,5 +244,12 @@ export const [TaskProvider, useTasks] = createContextHook(() => {
     toggleTaskComplete,
     updateTaskDetails,
     reorderTasks,
+    // New calendar-related functions
+    getTasksForDate,
+    getFirstTaskDate,
+    hasCompletedTasksOnDate,
+    hasTasksOnDate,
+    taskHistory,
+    firstUseDate,
   };
 });

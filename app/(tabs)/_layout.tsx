@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { CheckSquare, Trophy } from "lucide-react-native";
+import { CheckSquare, Trophy, CalendarDays } from "lucide-react-native";
 import React from "react";
 import { View, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -41,6 +41,17 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <View style={[styles.tabIconContainer, focused && styles.tabIconActive]}>
               <CheckSquare size={24} color={focused ? "white" : color} />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          title: "Calendar",
+          tabBarIcon: ({ color, focused }) => (
+            <View style={[styles.tabIconContainer, focused && styles.tabIconActive]}>
+              <CalendarDays size={24} color={focused ? "white" : color} />
             </View>
           ),
         }}

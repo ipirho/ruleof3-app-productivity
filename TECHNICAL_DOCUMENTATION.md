@@ -21,11 +21,12 @@ The Rule of 3 Productivity App is a React Native mobile application built with E
 
 ### Core Functionality
 - **Daily Task Management**: Set exactly 3 tasks each day with priority ordering
+- **Calendar & Historical Tracking**: View task history with visual calendar interface
 - **Drag & Drop Reordering**: Intuitive reordering of tasks by dragging
 - **Streak Tracking**: Gamified daily completion streaks  
 - **Achievement System**: Unlock achievements based on consistency and total tasks completed
 - **Task Details**: Add notes and sub-tasks to main tasks
-- **Persistent Storage**: All data saved locally using AsyncStorage
+- **Persistent Storage**: All data saved locally using AsyncStorage with historical data
 
 ---
 
@@ -40,6 +41,7 @@ The Rule of 3 Productivity App is a React Native mobile application built with E
 ### Key Dependencies
 - **react-native-gesture-handler**: `~2.24.0` - Touch gesture handling (drag & drop)
 - **@react-native-async-storage/async-storage**: `2.1.2` - Local data persistence
+- **react-native-calendars**: `^1.1313.0` - Calendar component for historical task tracking
 - **lucide-react-native**: `^0.475.0` - Icon library
 - **expo-haptics**: `~14.1.4` - Tactile feedback
 - **@expo-google-fonts/poppins**: `^0.4.0` - Typography
@@ -60,11 +62,12 @@ rork-ruleof3-productivity-app/
 │   └── (tabs)/                  # Tab navigation group
 │       ├── _layout.tsx          # Tab layout configuration
 │       ├── index.tsx            # Main home screen (Today tab)
+│       ├── calendar.tsx         # Calendar screen with historical task tracking
 │       └── achievements.tsx     # Achievements screen
 ├── providers/
-│   └── TaskProvider.tsx         # Main state management
+│   └── TaskProvider.tsx         # Main state management with historical data
 ├── types/
-│   └── task.ts                  # TypeScript interfaces
+│   └── task.ts                  # TypeScript interfaces (enhanced with historical types)
 ├── constants/
 │   ├── colors.ts                # App color scheme
 │   └── achievements.ts          # Achievement definitions

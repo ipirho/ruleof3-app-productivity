@@ -81,6 +81,15 @@ export default function HomeScreen() {
     return null;
   }
 
+  const getCurrentDateFormatted = () => {
+    const today = new Date();
+    return today.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  };
+
   const handleSetTasks = () => {
     const validTasks = newTasks.filter(t => t.trim());
     if (validTasks.length !== 3) {
@@ -248,6 +257,13 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
           scrollEnabled={!dragState.isDragging}
         >
+          {/* Current Date Display */}
+          {tasks.length > 0 && (
+            <View style={styles.dateContainer}>
+              <Text style={styles.currentDate}>{getCurrentDateFormatted()}</Text>
+            </View>
+          )}
+          
           {tasks.length === 0 ? (
             <View style={styles.emptyState}>
               <Calendar size={48} color={COLORS.textSecondary} />
@@ -651,6 +667,16 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 100,
+  },
+  dateContainer: {
+    alignItems: "center",
+    marginBottom: 16,
+    paddingVertical: 12,
+  },
+  currentDate: {
+    fontSize: 18,
+    fontFamily: "Poppins_600SemiBold",
+    color: COLORS.text,
   },
   emptyState: {
     alignItems: "center",
